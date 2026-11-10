@@ -1,0 +1,29 @@
+name: local-sre-agent
+
+services:
+  edge-app:
+    build: ./edge-app
+    container_name: edge-app
+    restart: "no"            # recovery is the agent's job, not Docker's
+    ports: ["${EDGE_PORT:-18080}:8080"]
+    volumes:
+      - ./config:/config:ro  # directory mount: an atomic rename of app.yaml stays visible
+      - edge-data:/data
+
+  traffic:
+    image: curlimages/curl:8.11.1
+    restart: unless-stopped
+    entrypoint: ["/bin/sh", "-c", "while true; do curl -s -o /dev/null --max-time 5 http://edge-app:8080/api/status; sleep 0.5; done"]
+
+  prometheus:
+    image: prom/prometheus:v3.1.0
+    ports: ["9090:9090"]
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+
+volumes:
+  edge-data:                 # 64 MB tmpfs: the small storage of an edge box
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+      o: size=64m

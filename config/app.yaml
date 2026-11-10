@@ -1,0 +1,4 @@
+service_name: edge-gateway
+upstream: http://sensors.local:9000
+log_level: INFO
+latency_ms: 0
