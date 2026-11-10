@@ -25,6 +25,7 @@ services:
     build: ./agent
     container_name: sre-agent
     restart: unless-stopped  # the agent itself is supervised by Docker; the app is supervised by the agent
+    env_file: [{path: .env, required: false}]  # any Settings field, e.g. APPROVAL_TIMEOUT_S=120
     environment:
       DRY_RUN: ${DRY_RUN:-false}
       OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:1.5b}
