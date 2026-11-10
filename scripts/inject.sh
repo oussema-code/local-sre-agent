@@ -31,11 +31,14 @@ case "${1:-}" in
     sed -i 's/^latency_ms:.*/latency_ms: 1500/' "$CONFIG"
     echo "pushed bad config: latency_ms=1500" ;;
   reset)
+    docker stop sre-agent >/dev/null 2>&1 || true   # agent off while we repair by hand
+    sed -i 's/^latency_ms:.*/latency_ms: 0/' "$CONFIG"
     docker start "$APP" >/dev/null
     docker exec "$APP" sh -c 'rm -rf /data/cache /data/logs/dump-* /data/logs/app.log.?'
-    docker exec sre-agent rm -f /var/lib/sre-agent/state.json 2>/dev/null &&
-      docker restart sre-agent >/dev/null && echo "agent cooldowns/restart budget cleared"
-    sed -i 's/^latency_ms:.*/latency_ms: 0/' "$CONFIG"
+    echo "waiting 35 s for Prometheus' 30 s latency window to forget the incident..."
+    sleep 35
+    docker run --rm -v local-sre-agent_agent-state:/s --entrypoint rm local-sre-agent-agent -f /s/state.json >/dev/null &&
+      docker start sre-agent >/dev/null && echo "agent restarted, cooldowns/restart budget cleared"
     echo "reset done" ;;
   status)
     echo "container : $(docker inspect -f '{{.State.Status}}' "$APP")"

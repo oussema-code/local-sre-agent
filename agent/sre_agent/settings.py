@@ -14,6 +14,7 @@ class Settings:
     ollama_url: str = "http://ollama:11434"
     ollama_model: str = "qwen2.5:1.5b"
     llm_timeout_s: float = 60.0
+    llm_threads: int = 2            # = Ollama CPU limit; more threads than cores thrash
     interval_s: float = 10.0
     latency_threshold_s: float = 0.5
     disk_threshold: float = 0.85

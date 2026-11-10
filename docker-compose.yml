@@ -27,14 +27,40 @@ services:
     restart: unless-stopped  # the agent itself is supervised by Docker; the app is supervised by the agent
     environment:
       DRY_RUN: ${DRY_RUN:-false}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:1.5b}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock  # only used by the restart action
       - ./config:/config                           # read-write: config rollback
       - edge-data:/data                            # cleanup
       - agent-state:/var/lib/sre-agent             # known-good, backups, quarantine, approvals, journal
-    depends_on: [edge-app, prometheus]
+    depends_on: [edge-app, prometheus, ollama]  # works without the model (fixed playbook) until it is pulled
+
+  ollama:
+    image: ollama/ollama:0.12.6
+    environment:
+      OLLAMA_KEEP_ALIVE: 30m
+    volumes:
+      - ollama-models:/root/.ollama
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 5s
+      retries: 20
+    deploy:
+      resources:
+        limits: {cpus: "2", memory: 3g}  # mimic edge hardware
+
+  ollama-pull:                           # one-shot: download the model, then exit
+    image: ollama/ollama:0.12.6
+    environment:
+      OLLAMA_HOST: ollama:11434
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:1.5b}
+    entrypoint: ["/bin/sh", "-c", "ollama pull \"$$OLLAMA_MODEL\""]
+    restart: "no"
+    depends_on:
+      ollama: {condition: service_healthy}
 
 volumes:
+  ollama-models:
   agent-state:
   edge-data:                 # 64 MB tmpfs: the small storage of an edge box
     driver_opts:

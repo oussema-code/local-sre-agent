@@ -7,7 +7,7 @@ from pathlib import Path
 import httpx
 from prometheus_client import start_http_server
 
-from . import actions, collector, verify
+from . import actions, collector, llm, verify
 from .approval import ApprovalStore
 from .graph import LAST_CYCLE, Deps, build_graph
 from .journal import Journal
@@ -28,7 +28,7 @@ def build_deps(s: Settings) -> Deps:
     return Deps(
         settings=s,
         collect=lambda: collector.collect(http, s),
-        diagnose=lambda incident, snap: None,  # phase 2: fixed playbook only
+        diagnose=lambda incident, snap: llm.diagnose(http, s, incident, snap),
         actions={
             "restart_service": lambda: actions.restart_service(s, docker_client()),
             "cleanup_logs": lambda: actions.cleanup_logs(s),
@@ -53,6 +53,7 @@ def main() -> None:
     log.info("sre-agent starting (dry_run=%s, interval=%ss)", s.dry_run, s.interval_s)
     if not args.once:
         start_http_server(s.metrics_port)
+    llm.warm_up(httpx.Client(), s)
     graph = build_graph(build_deps(s))
 
     while True:

@@ -1,4 +1,7 @@
 """End-to-end cycle scenarios with fakes (no Docker, no Ollama, no Prometheus)."""
+import httpx
+
+from sre_agent import llm
 from sre_agent.models import ActionResult, Decision, Snapshot
 
 from conftest import HEALTHY
@@ -25,6 +28,28 @@ def test_service_down_restart_resolved(make_agent):
     assert deps.actions["restart_service"].calls == 1
     assert rec["outcome"] == "resolved" and rec["decision"]["decided_by"] == "fallback"
     assert "service_down" in deps.policy_state.cooling()  # settle time, avoids re-triggering on stale metrics
+
+
+def ollama(content):
+    return httpx.Client(transport=httpx.MockTransport(
+        lambda r: httpx.Response(200, json={"message": {"content": content}})))
+
+
+def test_llm_decision_is_used(make_agent, settings):
+    http = ollama('{"action": "restart_service", "reason": "container exited", "confidence": 0.8}')
+    graph, deps = make_agent(DOWN, diagnose=lambda inc, snap: llm.diagnose(http, settings, inc, snap))
+    graph.invoke({"timeline": []})
+    assert last(deps)["decision"]["decided_by"] == "llm" and deps.actions["restart_service"].calls == 1
+
+
+def test_invalid_llm_answer_falls_back_to_playbook(make_agent, settings):
+    http = ollama("sure! restart it")
+    graph, deps = make_agent(DOWN, diagnose=lambda inc, snap: llm.diagnose(http, settings, inc, snap))
+    graph.invoke({"timeline": []})
+    rec = last(deps)
+    assert rec["decision"] == {"action": "restart_service", "reason": "fixed playbook", "confidence": 1.0,
+                               "decided_by": "fallback"}
+    assert rec["outcome"] == "resolved"
 
 
 def test_llm_disallowed_action_is_blocked_by_policy(make_agent):
