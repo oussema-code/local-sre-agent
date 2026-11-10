@@ -22,13 +22,19 @@ prom() { curl -s "$PROM/api/v1/query" --data-urlencode "query=$1" |
 case "${1:-}" in
   service-down)   docker stop "$APP" ;;
   disk-full)      fill /data/logs ;;                  # debug dumps left in the log dir: cleanup can fix it
-  disk-full-hard) fill /data/cache ;;                 # filler outside logs/: cleanup cannot fix it -> undo + escalate
+  disk-full-hard)                                     # filler outside logs/: cleanup frees too little -> undo + escalate
+    docker exec "$APP" dd if=/dev/zero of=/data/logs/app.log.3 bs=1M count=2 2>/dev/null
+    fill /data/cache ;;
   bad-config)
+    docker exec sre-agent test -f /var/lib/sre-agent/known-good/app.yaml 2>/dev/null ||
+      echo "warning: agent has no known-good config yet (needs ~60 s of healthy cycles): rollback will be refused"
     sed -i 's/^latency_ms:.*/latency_ms: 1500/' "$CONFIG"
     echo "pushed bad config: latency_ms=1500" ;;
   reset)
     docker start "$APP" >/dev/null
-    docker exec "$APP" sh -c 'rm -rf /data/cache /data/logs/dump-*'
+    docker exec "$APP" sh -c 'rm -rf /data/cache /data/logs/dump-* /data/logs/app.log.?'
+    docker exec sre-agent rm -f /var/lib/sre-agent/state.json 2>/dev/null &&
+      docker restart sre-agent >/dev/null && echo "agent cooldowns/restart budget cleared"
     sed -i 's/^latency_ms:.*/latency_ms: 0/' "$CONFIG"
     echo "reset done" ;;
   status)

@@ -1,0 +1,21 @@
+[project]
+name = "sre-agent"
+version = "0.1.0"
+description = "Local autonomous SRE agent for an edge box"
+requires-python = ">=3.11"
+dependencies = [
+    "langgraph>=1.0,<2",
+    "httpx>=0.27,<1",
+    "pydantic>=2,<3",
+    "docker>=7,<8",
+    "prometheus-client>=0.20,<1",
+]
+
+[project.optional-dependencies]
+test = ["pytest>=8"]
+
+[tool.setuptools]
+packages = ["sre_agent"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

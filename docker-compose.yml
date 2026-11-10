@@ -21,7 +21,21 @@ services:
     volumes:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
 
+  agent:
+    build: ./agent
+    container_name: sre-agent
+    restart: unless-stopped  # the agent itself is supervised by Docker; the app is supervised by the agent
+    environment:
+      DRY_RUN: ${DRY_RUN:-false}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock  # only used by the restart action
+      - ./config:/config                           # read-write: config rollback
+      - edge-data:/data                            # cleanup
+      - agent-state:/var/lib/sre-agent             # known-good, backups, quarantine, approvals, journal
+    depends_on: [edge-app, prometheus]
+
 volumes:
+  agent-state:
   edge-data:                 # 64 MB tmpfs: the small storage of an edge box
     driver_opts:
       type: tmpfs
