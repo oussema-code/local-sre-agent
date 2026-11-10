@@ -25,29 +25,18 @@ verification and rollback are plain code; the LLM only picks among pre-approved 
 Everything runs on one machine with Docker Compose.
 
 ```mermaid
-flowchart LR
-    traffic[traffic<br/>curl every 0.5 s] --> app
-    subgraph box[Edge box]
-        app[edge-app<br/>FastAPI 'edge-gateway'<br/>/health /api/status /metrics]
-        data[(/data<br/>64 MB tmpfs<br/>logs)]
-        cfg[(config/app.yaml)]
-        prom[Prometheus<br/>scrape 5 s]
-        ollama[Ollama<br/>qwen2.5:1.5b<br/>2 CPU / 3 GB]
-        agent[sre-agent<br/>LangGraph]
-        state[(/var/lib/sre-agent<br/>known-good, backups,<br/>quarantine, approvals,<br/>journal)]
-    end
-    app --- data
-    app -- reads --> cfg
-    prom -- scrape --> app
-    prom -- scrape --> agent
-    agent -- query --> prom
-    agent -- probes --> app
-    agent -- diagnose --> ollama
-    agent -- restart --> docker[Docker socket]
-    agent -- rollback --> cfg
-    agent -- cleanup --> data
-    agent --- state
+flowchart TB
     human((operator)) -- "cli approve / reject" --> state
+    subgraph box["Edge box (Docker Compose, no cloud)"]
+        traffic[traffic<br/>curl every 0.5 s] --> app
+        prom[Prometheus<br/>scrape every 5 s] -- scrape --> app
+        agent[sre-agent<br/>LangGraph cycle every 10 s] -- PromQL --> prom
+        agent -- diagnose --> ollama[Ollama<br/>qwen2.5:1.5b, 2 CPU / 3 GB]
+        agent -- "probe · restart · cleanup · rollback" --> app[edge-app<br/>FastAPI edge-gateway]
+        app --- data[(/data 64 MB tmpfs<br/>logs)]
+        app --- cfg[(config/app.yaml)]
+        agent --- state[(agent state<br/>known-good · quarantine<br/>approvals · journal)]
+    end
 ```
 
 | Service | Role |
